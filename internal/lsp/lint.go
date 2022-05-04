@@ -2,6 +2,8 @@ package lsp
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -72,9 +74,15 @@ func getDiagnosticFromLinterErr(err error) (*lsp.Diagnostic, string, error) {
 	msgStr := util.AfterStrings(err.Error(), "):")
 	msg := strings.TrimSpace(msgStr)
 
-	fileLine := util.BetweenStrings(err.Error(), "(", ")")
+	fileLine, present := util.BetweenStrings(err.Error(), "(", ")")
+	if !present {
+		return nil, "", errors.New("linter error string was not in between ()")
+	}
 	fileLineArr := strings.Split(fileLine, ":")
-	filename := getFilePathFromLinterErr(err)
+	filename, err := getFilePathFromLinterErr(err)
+	if err != nil {
+		return nil, "", fmt.Errorf("getting filepath from linter error: %w", err)
+	}
 	lineStr := fileLineArr[1]
 
 	line, err := strconv.Atoi(lineStr)
@@ -92,12 +100,16 @@ func getDiagnosticFromLinterErr(err error) (*lsp.Diagnostic, string, error) {
 	}, filename, nil
 }
 
-func getFilePathFromLinterErr(err error) string {
+func getFilePathFromLinterErr(err error) (string, error) {
 	var filename string
-	fileLine := util.BetweenStrings(err.Error(), "(", ")")
+	fileLine, present := util.BetweenStrings(err.Error(), "(", ")")
+	if !present {
+		return "", errors.New("linter error string was not in between ()")
+	}
+
 	file, _, found := strings.Cut(fileLine, ":")
 	if !found {
-		return ""
+		return "", errors.New(": not found in linterError")
 	}
 	paths := strings.Split(file, "/")
 	for i, p := range paths {
@@ -105,5 +117,5 @@ func getFilePathFromLinterErr(err error) string {
 			filename = strings.Join(paths[i:], "/")
 		}
 	}
-	return filename
+	return filename, nil
 }

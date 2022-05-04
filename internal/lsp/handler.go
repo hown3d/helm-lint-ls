@@ -3,10 +3,13 @@ package lsp
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 
 	"go.lsp.dev/jsonrpc2"
 	lsp "go.lsp.dev/protocol"
+	"go.lsp.dev/uri"
 
+	"github.com/mrjosh/helm-lint-ls/internal/helm"
 	"github.com/mrjosh/helm-lint-ls/internal/log"
 )
 
@@ -24,6 +27,7 @@ func NewHandler(connPool jsonrpc2.Conn) jsonrpc2.Handler {
 type langHandler struct {
 	connPool   jsonrpc2.Conn
 	linterName string
+	rootURI    uri.URI
 }
 
 func (h *langHandler) handle(ctx context.Context, reply jsonrpc2.Replier, req jsonrpc2.Request) (err error) {
@@ -51,8 +55,16 @@ func (h *langHandler) handle(ctx context.Context, reply jsonrpc2.Replier, req js
 	return jsonrpc2.MethodNotFoundHandler(ctx, reply, req)
 }
 
-func (h *langHandler) handleTextDocumentCompletion(_ context.Context, reply jsonrpc2.Replier, req jsonrpc2.Request) (err error) {
-	return nil
+func (h *langHandler) handleTextDocumentCompletion(ctx context.Context, reply jsonrpc2.Replier, req jsonrpc2.Request) error {
+	var params lsp.CompletionParams
+	if err := json.Unmarshal(req.Params(), &params); err != nil {
+		return err
+	}
+
+	completions, err := completeValue(params.TextDocument.URI.Filename(), params.Position)
+	return reply(ctx, lsp.CompletionList{
+		Items: completions,
+	}, err)
 }
 
 func (h *langHandler) handleInitialize(ctx context.Context, reply jsonrpc2.Replier, req jsonrpc2.Request) (err error) {
@@ -61,6 +73,20 @@ func (h *langHandler) handleInitialize(ctx context.Context, reply jsonrpc2.Repli
 		return err
 	}
 
+	rootURI := params.RootURI
+	// initialize values
+	ok, err := helm.IsChartDirectory(rootURI.Filename())
+	if err != nil {
+		return fmt.Errorf("checking if dir is helm chart directory: %w", err)
+	}
+	if ok {
+		err = helm.InitializeValues(rootURI.Filename())
+		if err != nil {
+			return fmt.Errorf("initializing helm values: %w", err)
+		}
+	}
+
+	h.rootURI = params.RootURI
 	return reply(ctx, lsp.InitializeResult{
 		Capabilities: lsp.ServerCapabilities{
 			TextDocumentSync: lsp.TextDocumentSyncOptions{

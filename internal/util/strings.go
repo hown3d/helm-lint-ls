@@ -3,20 +3,20 @@ package util
 import "strings"
 
 // BetweenStrings gets the substring between two strings.
-func BetweenStrings(value string, a string, b string) string {
-	posFirst := strings.Index(value, a)
+func BetweenStrings(value string, leftDelimiter string, rightDelimiter string) (v string, present bool) {
+	posFirst := strings.Index(value, leftDelimiter)
 	if posFirst == -1 {
-		return ""
+		return value, false
 	}
-	posLast := strings.Index(value, b)
+	posLast := strings.Index(value, rightDelimiter)
 	if posLast == -1 {
-		return ""
+		return value, false
 	}
-	posFirstAdjusted := posFirst + len(a)
+	posFirstAdjusted := posFirst + len(leftDelimiter)
 	if posFirstAdjusted >= posLast {
-		return ""
+		return value, false
 	}
-	return value[posFirstAdjusted:posLast]
+	return value[posFirstAdjusted:posLast], true
 }
 
 // AfterStrings gets the substring after a string.
